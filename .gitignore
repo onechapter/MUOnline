@@ -8,3 +8,5 @@ coverage/
 .vite/
 data/
 start-client.bat
+
+.env.local
