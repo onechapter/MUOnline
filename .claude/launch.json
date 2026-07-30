@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "client",
+      "runtimeExecutable": "D:\\MUONLINE\\start-client.bat",
+      "runtimeArgs": [],
+      "port": 5173
+    }
+  ]
+}
