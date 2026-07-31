@@ -37,6 +37,7 @@ import SettingsPanel from './SettingsPanel';
 import SkillTreePanel from './SkillTreePanel';
 import Minimap from './Minimap';
 import Notifications from './Notifications';
+import LoadingScreen from './LoadingScreen';
 import './Game.css';
 
 export default function GameScene() {
@@ -54,10 +55,12 @@ export default function GameScene() {
   const [showSkillTree, setShowSkillTree] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [chatVisible, setChatVisible] = useState(true);
+  const [loading, setLoading] = useState(true);
   const keysDown = useRef(new Set());
 
   useEffect(() => {
     if (!auth.token) return;
+    setLoading(true);
     const characterId = localStorage.getItem('selectedCharacter');
     const socket = connectSocket(auth.token, characterId);
     socket.emit('auth:login');
@@ -70,24 +73,42 @@ export default function GameScene() {
       if (data.nearbyNPCs) dispatch(setNPCs(data.nearbyNPCs));
       if (data.nearbyItems) dispatch(setItemsOnGround(data.nearbyItems));
       if (data.nearbyPlayers) dispatch(setOtherPlayers(data.nearbyPlayers));
+      if (data.player?.inventory) dispatch(setInventory(data.player.inventory));
+      if (data.player?.equipment) dispatch(setEquipment(data.player.equipment));
+      if (data.player?.position) dispatch(updatePlayerPosition(data.player.position));
+      setLoading(false);
     }));
     unsubs.push(on('move:confirm', (d) => dispatch(updatePlayerPosition(d.position))));
     unsubs.push(on('world:monsters', (d) => dispatch(setMonsters(d.monsters))));
     unsubs.push(on('world:npcs', (d) => dispatch(setNPCs(d.npcs))));
+    unsubs.push(on('world:items', (d) => dispatch(setItemsOnGround(d.items))));
     unsubs.push(on('player:damage', (d) => {
       dispatch(updatePlayerHP(d.playerHP));
       if (d.damage) dispatch(addNotification({ id: Date.now(), message: `Took ${d.damage} damage!`, type: 'error' }));
     }));
+    unsubs.push(on('attack:result', (d) => {
+      if (d.success) {
+        dispatch(addNotification({ id: Date.now(), message: `Hit for ${d.damage} damage!`, type: 'success' }));
+      } else {
+        dispatch(addNotification({ id: Date.now(), message: d.error || 'Attack failed', type: 'error' }));
+      }
+    }));
     unsubs.push(on('monster:dead', (d) => {
+      dispatch(setMonsters(game.monsters?.filter(m => m.instanceId !== d.targetId) || []));
       if (d.drops) {
         for (const drop of d.drops) {
           if (drop.type === 'gold') {
             dispatch(addGold(drop.amount));
-            dispatch(addNotification({ id: Date.now() + drop.index, message: `+${drop.amount} gold!`, type: 'success' }));
+            dispatch(addNotification({ id: Date.now() + (drop.index || 0), message: `+${drop.amount} gold!`, type: 'success' }));
           }
         }
       }
       if (d.exp) dispatch(addNotification({ id: Date.now() + 99, message: `+${d.exp} exp!`, type: 'success' }));
+    }));
+    unsubs.push(on('monster:damage', (d) => {
+      dispatch(setMonsters((game.monsters || []).map(m =>
+        m.instanceId === d.targetId ? { ...m, currentHP: d.hp } : m
+      )));
     }));
     unsubs.push(on('level:up', (d) => {
       dispatch(levelUp(d));
@@ -97,7 +118,10 @@ export default function GameScene() {
     unsubs.push(on('inventory:result', (d) => dispatch(setInventory(d.inventory))));
     unsubs.push(on('equip:result', (d) => dispatch(setEquipment(d.equipment))));
     unsubs.push(on('npc:result', (d) => { if (d.type === 'shop') dispatch(setShop(d)); }));
-    unsubs.push(on('skill:result', (d) => { if (d.currentMP !== undefined) dispatch(updatePlayerMP(d.currentMP)); }));
+    unsubs.push(on('skill:result', (d) => {
+      if (d.currentMP !== undefined) dispatch(updatePlayerMP(d.currentMP));
+      if (d.message) dispatch(addNotification({ id: Date.now(), message: d.message, type: 'info' }));
+    }));
     unsubs.push(on('map:changed', (d) => {
       dispatch(updatePlayerPosition(d.position));
       dispatch(setCurrentMap(d.position.mapId));
@@ -122,6 +146,7 @@ export default function GameScene() {
     return () => { unsubs.forEach((fn) => fn?.()); };
   }, [auth.token, dispatch]);
 
+  // Keyboard
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -133,20 +158,36 @@ export default function GameScene() {
       if (e.key === 'g' || e.key === 'G') setShowGuild((v) => !v);
       if (e.key === 'e' || e.key === 'E') setShowEnhancement((v) => !v);
       if (e.key === 't' || e.key === 'T') setShowSkillTree((v) => !v);
-      if (e.key === 'Escape') setShowSettings(false);
+      if (e.key === 'Escape') {
+        setShowInventory(false); setShowStats(false); setShowParty(false);
+        setShowMap(false); setShowGuild(false); setShowEnhancement(false);
+        setShowSkillTree(false); setShowSettings(false); setShowTrading(false);
+      }
+      // Attack nearest monster with F or Space
+      if (e.key === 'f' || e.key === 'F' || e.key === ' ') {
+        e.preventDefault();
+        const monsters = game.monsters?.filter(m => m.currentHP > 0) || [];
+        if (monsters.length > 0 && game.playerPosition) {
+          const nearest = monsters.sort((a, b) => {
+            const distA = Math.hypot(a.position.x - game.playerPosition.x, a.position.z - game.playerPosition.z);
+            const distB = Math.hypot(b.position.x - game.playerPosition.x, b.position.z - game.playerPosition.z);
+            return distA - distB;
+          })[0];
+          if (nearest) emit('player:attack', { targetId: nearest.instanceId });
+        }
+      }
       keysDown.current.add(e.key.toLowerCase());
     };
-    const handleKeyUp = (e) => {
-      keysDown.current.delete(e.key.toLowerCase());
-    };
+    const handleKeyUp = (e) => { keysDown.current.delete(e.key.toLowerCase()); };
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, []);
+  }, [game.monsters, game.playerPosition]);
 
+  // Movement
   useEffect(() => {
     const interval = setInterval(() => {
       const pos = game.playerPosition;
@@ -169,11 +210,13 @@ export default function GameScene() {
     emit('player:move', { x: pos.x + dx * 2, y: pos.y, z: pos.z + dz * 2 });
   }, [game.playerPosition]);
 
-  const handleChatSend = () => {
-    if (!chatInput.trim()) return;
-    emit('chat:message', { message: chatInput, type: 'global' });
+  const handleChatSend = (data) => {
+    const msg = typeof data === 'string' ? data : data.message || chatInput;
+    const type = typeof data === 'object' ? data.type : 'global';
+    if (!msg.trim()) return;
+    emit('chat:message', { message: msg.trim(), type });
     dispatch(addChatMessage({
-      id: Date.now(), sender: 'You', message: chatInput, type: 'global', timestamp: Date.now(),
+      id: Date.now(), sender: 'You', message: msg.trim(), type, timestamp: Date.now(),
     }));
     setChatInput('');
   };
@@ -186,13 +229,17 @@ export default function GameScene() {
     emit('player:useSkill', { skillId });
   };
 
+  if (loading) {
+    return <LoadingScreen message="Connecting to game server..." />;
+  }
+
   return (
     <div className="game-scene">
       <Canvas shadows>
         <Scene3D
-          monsters={game.monsters}
-          npcs={game.npcs}
-          itemsOnGround={game.itemsOnGround}
+          monsters={game.monsters || []}
+          npcs={game.npcs || []}
+          itemsOnGround={game.itemsOnGround || []}
           playerPosition={game.playerPosition}
           onSelectMonster={handleSelectMonster}
         />
@@ -219,13 +266,13 @@ export default function GameScene() {
       <SkillHotbar onUseSkill={handleUseSkill} />
 
       {showInventory && <InventoryPanel
-        inventory={game.inventory}
-        equipment={game.equipment}
+        inventory={game.inventory || []}
+        equipment={game.equipment || {}}
         onClose={() => setShowInventory(false)}
       />}
 
       {showStats && <StatsPanel
-        stats={game.stats}
+        stats={game.stats || {}}
         level={game.playerLevel}
         hp={game.playerHP}
         maxHP={game.playerMaxHP}
@@ -265,6 +312,10 @@ export default function GameScene() {
           <button className="move-btn" onClick={() => handleMove(1, 0)}>►</button>
         </div>
         <button className="move-btn" onClick={() => handleMove(0, 1)}>▼</button>
+      </div>
+
+      <div style={{ position: 'fixed', bottom: '10px', right: '200px', color: '#aaa', fontSize: '11px', zIndex: 100, pointerEvents: 'none' }}>
+        [F/Space] Attack | [WASD/Arrows] Move | [I] Inventory | [C] Stats | [ESC] Close
       </div>
     </div>
   );
