@@ -17,10 +17,16 @@ import {
   setEquipment,
   setShop,
   addGold,
+  updatePlayerGold,
   setCurrentMap,
   updateStats,
   levelUp,
   addNotification,
+  setParty,
+  setGuild,
+  setPendingPartyInvite,
+  setPendingGuildInvite,
+  setActiveTrade,
 } from '../../store/gameSlice';
 import Scene3D from './Scene3D';
 import HUD from './HUD';
@@ -139,6 +145,70 @@ export default function GameScene() {
       } else {
         dispatch(addNotification({ id: Date.now(), message: d.message || 'Enhancement failed!', type: 'error' }));
       }
+    }));
+
+    // Phase 2: Party/Guild/Trade socket listeners
+    unsubs.push(on('party:created', (d) => {
+      dispatch(setParty(d));
+      dispatch(addNotification({ id: Date.now(), message: `Party "${d.name}" created!`, type: 'success' }));
+    }));
+    unsubs.push(on('party:error', (d) => dispatch(addNotification({ id: Date.now(), message: d.message || 'Party error', type: 'error' }))));
+    unsubs.push(on('party:left', () => {
+      dispatch(setParty(null));
+      dispatch(addNotification({ id: Date.now(), message: 'Left party', type: 'info' }));
+    }));
+    unsubs.push(on('party:invite', (d) => dispatch(setPendingPartyInvite(d))));
+    unsubs.push(on('party:member-joined', (d) => dispatch(addNotification({ id: Date.now(), message: `${d.name} joined party`, type: 'info' }))));
+    unsubs.push(on('party:member-left', (d) => dispatch(addNotification({ id: Date.now(), message: `${d.name} left party`, type: 'info' }))));
+
+    unsubs.push(on('guild:created', (d) => {
+      dispatch(setGuild(d));
+      dispatch(addNotification({ id: Date.now(), message: `Guild "${d.name}" created!`, type: 'success' }));
+    }));
+    unsubs.push(on('guild:error', (d) => dispatch(addNotification({ id: Date.now(), message: d.message || 'Guild error', type: 'error' }))));
+    unsubs.push(on('guild:joined', (d) => {
+      dispatch(setGuild(d));
+      dispatch(addNotification({ id: Date.now(), message: `Joined guild "${d.name}"!`, type: 'success' }));
+    }));
+    unsubs.push(on('guild:left', () => {
+      dispatch(setGuild(null));
+      dispatch(addNotification({ id: Date.now(), message: 'Left guild', type: 'info' }));
+    }));
+    unsubs.push(on('guild:invite', (d) => dispatch(setPendingGuildInvite(d))));
+
+    unsubs.push(on('trade:request', (d) => {
+      dispatch(setActiveTrade({ initiator: d.from, targetId: d.playerId }));
+      dispatch(addNotification({ id: Date.now(), message: `${d.from} wants to trade with you!`, type: 'info' }));
+    }));
+    unsubs.push(on('trade:accepted', (d) => {
+      dispatch(setActiveTrade(d.trade));
+      dispatch(addNotification({ id: Date.now(), message: 'Trade accepted!', type: 'success' }));
+    }));
+    unsubs.push(on('trade:declined', () => {
+      dispatch(setActiveTrade(null));
+      dispatch(addNotification({ id: Date.now(), message: 'Trade declined', type: 'error' }));
+    }));
+    unsubs.push(on('trade:error', (d) => dispatch(addNotification({ id: Date.now(), message: d.message || 'Trade error', type: 'error' }))));
+
+    // Enhanced NPC interaction for shop
+    unsubs.push(on('equip:error', (d) => dispatch(addNotification({ id: Date.now(), message: d.message || 'Equip failed', type: 'error' }))));
+    unsubs.push(on('item:used', (d) => {
+      if (d.healHP) dispatch(updatePlayerHP(d.healHP));
+      if (d.healMP) dispatch(updatePlayerMP(d.healMP));
+      dispatch(addNotification({ id: Date.now(), message: d.message || 'Item used', type: 'success' }));
+    }));
+    unsubs.push(on('shop:buy:result', (d) => {
+      if (d.gold !== undefined) dispatch(updatePlayerGold(d.gold));
+      if (d.item) dispatch(addNotification({ id: Date.now(), message: `Bought ${d.item.name}!`, type: 'success' }));
+    }));
+    unsubs.push(on('shop:sell:result', (d) => {
+      if (d.gold !== undefined) dispatch(updatePlayerGold(d.gold));
+      dispatch(addNotification({ id: Date.now(), message: d.message || 'Item sold', type: 'success' }));
+    }));
+
+    // Attack cooldown enforcement
+    unsubs.push(on('attack:cooldown', (d) => {
+      dispatch(addNotification({ id: Date.now(), message: d.message || 'Attack cooldown', type: 'error' }));
     }));
 
     dispatch(setConnected(true));

@@ -1,55 +1,86 @@
 import { useState } from 'react';
+import { useSelector } from 'react-redux';
+import { on, emit } from '../../network/SocketManager';
+import { addNotification } from '../../store/gameSlice';
+import { useDispatch } from 'react-redux';
 
 export default function SettingsPanel({ onClose }) {
-  const [graphics, setGraphics] = useState('high');
+  const dispatch = useDispatch();
   const [showMinimap, setShowMinimap] = useState(true);
-  const [soundVolume, setSoundVolume] = useState(80);
-  const [musicVolume, setMusicVolume] = useState(60);
+  const [showNames, setShowNames] = useState(true);
+  const [showDamage, setShowDamage] = useState(true);
+  const [showCoords, setShowCoords] = useState(false);
+  const [autoPickup, setAutoPickup] = useState(false);
+  const [attackRange, setAttackRange] = useState(2);
 
   return (
     <div className="panel-overlay" onClick={onClose}>
-      <div className="panel settings-panel" onClick={(e) => e.stopPropagation()}>
+      <div className="panel settings-panel" onClick={(e) => e.stopPropagation()} style={{ minWidth: '400px' }}>
         <div className="panel-header">
-          <h3>Settings</h3>
+          <h3>⚙ Settings</h3>
           <button className="panel-close" onClick={onClose}>X</button>
         </div>
-        <div className="settings-group">
-          <h4>Graphics</h4>
-          <select value={graphics} onChange={(e) => setGraphics(e.target.value)}>
-            <option value="low">Low</option>
-            <option value="medium">Medium</option>
-            <option value="high">High</option>
-            <option value="ultra">Ultra</option>
-          </select>
-        </div>
-        <div className="settings-group">
-          <h4>Sound</h4>
-          <div className="volume-control">
-            <label>SFX: {soundVolume}%</label>
-            <input type="range" min={0} max={100} value={soundVolume} onChange={(e) => setSoundVolume(Number(e.target.value))} />
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', padding: '4px' }}>
+          {/* Display */}
+          <div>
+            <h4 style={{ margin: '0 0 8px', color: '#4af', borderBottom: '1px solid #333', paddingBottom: '4px' }}>Display</h4>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ccc', fontSize: '13px' }}>
+                <input type="checkbox" checked={showMinimap} onChange={() => setShowMinimap(!showMinimap)} />
+                Show Minimap
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ccc', fontSize: '13px' }}>
+                <input type="checkbox" checked={showNames} onChange={() => setShowNames(!showNames)} />
+                Show Entity Names
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ccc', fontSize: '13px' }}>
+                <input type="checkbox" checked={showDamage} onChange={() => setShowDamage(!showDamage)} />
+                Show Damage Numbers
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ccc', fontSize: '13px' }}>
+                <input type="checkbox" checked={showCoords} onChange={() => setShowCoords(!showCoords)} />
+                Show Coordinates
+              </label>
+            </div>
           </div>
-          <div className="volume-control">
-            <label>Music: {musicVolume}%</label>
-            <input type="range" min={0} max={100} value={musicVolume} onChange={(e) => setMusicVolume(Number(e.target.value))} />
+
+          {/* Combat */}
+          <div>
+            <h4 style={{ margin: '0 0 8px', color: '#f44', borderBottom: '1px solid #333', paddingBottom: '4px' }}>Combat</h4>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ccc', fontSize: '13px' }}>
+                <input type="checkbox" checked={autoPickup} onChange={() => setAutoPickup(!autoPickup)} />
+                Auto Pick-Up Items
+              </label>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#ccc', fontSize: '13px' }}>
+                <span>Attack Range:</span>
+                <input
+                  type="range" min="1" max="5" value={attackRange}
+                  onChange={(e) => setAttackRange(parseInt(e.target.value))}
+                  style={{ flex: 1 }}
+                />
+                <span style={{ minWidth: '20px' }}>{attackRange}</span>
+              </div>
+            </div>
           </div>
-        </div>
-        <div className="settings-group">
-          <label className="settings-label">
-            <input type="checkbox" checked={showMinimap} onChange={() => setShowMinimap(!showMinimap)} />
-            Show Minimap
-          </label>
-        </div>
-        <div className="settings-keys">
-          <h4>Key Bindings</h4>
-          <div className="key-row"><span>Movement</span><span>WASD / Arrow Keys</span></div>
-          <div className="key-row"><span>Inventory</span><span>I</span></div>
-          <div className="key-row"><span>Stats</span><span>C</span></div>
-          <div className="key-row"><span>Chat</span><span>Enter</span></div>
-          <div className="key-row"><span>Party</span><span>P</span></div>
-          <div className="key-row"><span>Map</span><span>M</span></div>
-          <div className="key-row"><span>Guild</span><span>G</span></div>
-          <div className="key-row"><span>Enhance</span><span>E</span></div>
-          <div className="key-row"><span>Skills</span><span>1-9</span></div>
+
+          {/* Info */}
+          <div style={{ background: '#111', border: '1px solid #333', borderRadius: '6px', padding: '10px', marginTop: '8px' }}>
+            <h4 style={{ margin: '0 0 6px', color: '#888', fontSize: '12px' }}>Controls</h4>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', fontSize: '12px' }}>
+              <div><kbd style={{ background: '#222', padding: '1px 4px', borderRadius: '3px', color: '#aaa' }}>F/Space</kbd> Attack</div>
+              <div><kbd style={{ background: '#222', padding: '1px 4px', borderRadius: '3px', color: '#aaa' }}>WASD</kbd> Move</div>
+              <div><kbd style={{ background: '#222', padding: '1px 4px', borderRadius: '3px', color: '#aaa' }}>I</kbd> Inventory</div>
+              <div><kbd style={{ background: '#222', padding: '1px 4px', borderRadius: '3px', color: '#aaa' }}>C</kbd> Stats</div>
+              <div><kbd style={{ background: '#222', padding: '1px 4px', borderRadius: '3px', color: '#aaa' }}>P</kbd> Party</div>
+              <div><kbd style={{ background: '#222', padding: '1px 4px', borderRadius: '3px', color: '#aaa' }}>M</kbd> Map</div>
+              <div><kbd style={{ background: '#222', padding: '1px 4px', borderRadius: '3px', color: '#aaa' }}>G</kbd> Guild</div>
+              <div><kbd style={{ background: '#222', padding: '1px 4px', borderRadius: '3px', color: '#aaa' }}>E</kbd> Enhance</div>
+              <div><kbd style={{ background: '#222', padding: '1px 4px', borderRadius: '3px', color: '#aaa' }}>T</kbd> Skills</div>
+              <div><kbd style={{ background: '#222', padding: '1px 4px', borderRadius: '3px', color: '#aaa' }}>ESC</kbd> Close</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

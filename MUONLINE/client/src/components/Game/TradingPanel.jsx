@@ -1,24 +1,20 @@
 import { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { on, emit } from '../../network/SocketManager';
-import { addItem, removeItem, setInventory, setEquipment, equipItem, addGold, updatePlayerGold, addNotification } from '../../store/gameSlice';
+import { setInventory, addGold, updatePlayerGold, addNotification } from '../../store/gameSlice';
 
 export default function TradingPanel({ onClose }) {
   const dispatch = useDispatch();
-  const game = useSelector((state) => state.game);
-  const player = useSelector((state) => state.game.player);
   const inventory = useSelector((state) => state.game.inventory);
   const [partnerItems, setPartnerItems] = useState([]);
   const [myTradeItems, setMyTradeItems] = useState([]);
   const [partnerTradeItems, setPartnerTradeItems] = useState([]);
   const [myReady, setMyReady] = useState(false);
   const [partnerReady, setPartnerReady] = useState(false);
-  const [tradeId, setTradeId] = useState(null);
   const [message, setMessage] = useState('');
 
   useEffect(() => {
     const unsub1 = on('trade:accepted', (d) => {
-      setTradeId(d.trade?.id);
       setPartnerReady(false);
       setMessage('Trade accepted! Add items to trade.');
     });
@@ -35,7 +31,7 @@ export default function TradingPanel({ onClose }) {
     const unsub4 = on('trade:partner-ready', () => setPartnerReady(true));
     const unsub5 = on('trade:partner-not-ready', () => setPartnerReady(false));
     const unsub6 = on('trade:complete', (d) => {
-      if (d.receivedItems) dispatch(setInventory([...(game.inventory || []), ...d.receivedItems]));
+      if (d.receivedItems) dispatch(setInventory([...inventory, ...d.receivedItems]));
       if (d.goldReceived) dispatch(addGold(d.goldReceived));
       setMessage('Trade complete!');
       setMyTradeItems([]);
@@ -45,7 +41,7 @@ export default function TradingPanel({ onClose }) {
     });
     const unsub7 = on('trade:error', (d) => setMessage(d.message || 'Trade error'));
     return () => { unsub1(); unsub2(); unsub3(); unsub4(); unsub5(); unsub6(); unsub7(); };
-  }, [dispatch, game.inventory]);
+  }, [dispatch, inventory]);
 
   const handleAddItem = (itemIndex) => {
     if (!inventory[itemIndex]) return;

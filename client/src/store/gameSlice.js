@@ -24,6 +24,15 @@ const initialState = {
   selectedMonster: null,
   buffs: [],
   notifications: [],
+  // Phase 2: Party/Guild/Trade state
+  party: null,
+  partyMembers: [],
+  guild: null,
+  guildMembers: [],
+  pendingPartyInvite: null,
+  pendingGuildInvite: null,
+  activeTrade: null,
+  tradePartner: null,
 };
 
 const gameSlice = createSlice({
@@ -86,8 +95,27 @@ const gameSlice = createSlice({
     setInventory: (state, action) => {
       state.inventory = action.payload;
     },
+    addItem: (state, action) => {
+      if (state.inventory.length < 64) {
+        state.inventory.push(action.payload);
+      }
+    },
+    removeItem: (state, action) => {
+      state.inventory.splice(action.payload, 1);
+    },
     setEquipment: (state, action) => {
       state.equipment = action.payload;
+    },
+    equipItem: (state, action) => {
+      const { slot, item, inventoryIndex } = action.payload;
+      if (item) {
+        state.equipment[slot] = item;
+        if (inventoryIndex !== undefined) {
+          state.inventory.splice(inventoryIndex, 1);
+        }
+      } else {
+        delete state.equipment[slot];
+      }
     },
     setShop: (state, action) => {
       state.shopOpen = action.payload;
@@ -113,6 +141,54 @@ const gameSlice = createSlice({
     removeNotification: (state, action) => {
       state.notifications = state.notifications.filter((n) => n.id !== action.payload);
     },
+    // Phase 2: Party/Guild/Trade reducers
+    setParty: (state, action) => {
+      state.party = action.payload;
+    },
+    setPartyMembers: (state, action) => {
+      state.partyMembers = action.payload;
+    },
+    addPartyMember: (state, action) => {
+      state.partyMembers.push(action.payload);
+    },
+    removePartyMember: (state, action) => {
+      state.partyMembers = state.partyMembers.filter(
+        (m) => m.id !== action.payload
+      );
+    },
+    setPendingPartyInvite: (state, action) => {
+      state.pendingPartyInvite = action.payload;
+    },
+    setGuild: (state, action) => {
+      state.guild = action.payload;
+    },
+    setGuildMembers: (state, action) => {
+      state.guildMembers = action.payload;
+    },
+    addGuildMember: (state, action) => {
+      state.guildMembers.push(action.payload);
+    },
+    removeGuildMember: (state, action) => {
+      state.guildMembers = state.guildMembers.filter(
+        (m) => m.id !== action.payload
+      );
+    },
+    setPendingGuildInvite: (state, action) => {
+      state.pendingGuildInvite = action.payload;
+    },
+    setActiveTrade: (state, action) => {
+      state.activeTrade = action.payload;
+    },
+    setTradePartner: (state, action) => {
+      state.tradePartner = action.payload;
+    },
+    clearTrade: (state) => {
+      state.activeTrade = null;
+      state.tradePartner = null;
+    },
+    updatePlayerGold: (state, action) => {
+      state.playerGold = action.payload;
+    },
   },
 });
 
@@ -129,15 +205,33 @@ export const {
   updatePlayerPosition,
   levelUp,
   setInventory,
+  addItem,
+  removeItem,
   setEquipment,
+  equipItem,
   setShop,
   setSelectedMonster,
   updateStats,
   addGold,
+  updatePlayerGold,
   setBuffs,
   setCurrentMap,
   addNotification,
   removeNotification,
+  // Phase 2 exports
+  setParty,
+  setPartyMembers,
+  addPartyMember,
+  removePartyMember,
+  setPendingPartyInvite,
+  setGuild,
+  setGuildMembers,
+  addGuildMember,
+  removeGuildMember,
+  setPendingGuildInvite,
+  setActiveTrade,
+  setTradePartner,
+  clearTrade,
 } = gameSlice.actions;
 
 export default gameSlice.reducer;

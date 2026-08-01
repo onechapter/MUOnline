@@ -1,96 +1,108 @@
 import { useState, useEffect } from 'react';
-import api from '../../api';
-import { emit } from '../../network/SocketManager';
 import { useSelector } from 'react-redux';
+import { emit } from '../../network/SocketManager';
 
 export default function SkillTreePanel({ onClose }) {
-  const [skills, setSkills] = useState([]);
-  const [loading, setLoading] = useState(true);
   const player = useSelector((state) => state.game.player);
-  const playerLevel = useSelector((state) => state.game.playerLevel);
+  const playerLevel = useSelector((state) => state.game.playerLevel || 1);
+  const [skills, setSkills] = useState([]);
+  const [activeSkill, setActiveSkill] = useState(null);
+  const [message, setMessage] = useState('');
 
+  // Load skills from player data
   useEffect(() => {
-    api.get('/game/skills')
-      .then(({ data }) => setSkills(data.data || []))
-      .catch(() => setSkills([]))
-      .finally(() => setLoading(false));
-  }, []);
+    if (player?.skills) {
+      setSkills(player.skills);
+    } else {
+      setSkills([]);
+    }
+  }, [player]);
 
-  const playerClass = player?.characterClass;
-  const playerSkills = player?.skills || [];
-  const isLearned = (skillId) => playerSkills.some((s) => s.skillId === skillId);
-  const canLearn = (skill) => skill.class === playerClass && playerLevel >= skill.level && !isLearned(skill.skillId);
-
-  const handleLearn = (skillId) => {
-    emit('skill:learn', { skillId });
-    onClose();
+  const handleUpgrade = (skillId) => {
+    emit('skill:upgrade', { skillId });
+    setMessage('Upgrading skill...');
   };
 
-  const handleUse = (skillId) => {
+  const handleUseSkill = (skillId) => {
     emit('player:useSkill', { skillId });
   };
 
-  if (loading) return null;
+  if (!skills || skills.length === 0) {
+    return (
+      <div className="panel-overlay" onClick={onClose}>
+        <div className="panel skill-panel" onClick={(e) => e.stopPropagation()}>
+          <div className="panel-header">
+            <h3>Skill Tree</h3>
+            <button className="panel-close" onClick={onClose}>X</button>
+          </div>
+          <div style={{ textAlign: 'center', padding: '40px', color: '#888' }}>
+            <p>No skills learned yet</p>
+            <p style={{ fontSize: '12px' }}>Skills unlock as you level up</p>
+            <p style={{ fontSize: '12px', color: '#aaa' }}>Current Level: {playerLevel}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="panel-overlay" onClick={onClose}>
-      <div className="panel skill-tree-panel" onClick={(e) => e.stopPropagation()}>
+      <div className="panel skill-panel" onClick={(e) => e.stopPropagation()} style={{ minWidth: '500px' }}>
         <div className="panel-header">
-          <h3>Skill Tree{playerClass ? ` - ${playerClass}` : ''}</h3>
+          <h3>Skill Tree (Lv.{playerLevel})</h3>
           <button className="panel-close" onClick={onClose}>X</button>
         </div>
 
-        <div className="skill-list">
-          {skills.length === 0 && <div className="skill-empty">No skills available</div>}
+        {message && (
+          <div style={{ padding: '6px', background: '#1a2a1a', borderRadius: '4px', marginBottom: '10px', color: '#8f8', fontSize: '12px', textAlign: 'center' }}>
+            {message}
+          </div>
+        )}
 
-          {skills.map((skill) => {
-            const learned = isLearned(skill.skillId);
-            const can = canLearn(skill);
-            const wrongClass = skill.class !== playerClass;
-            const locked = !wrongClass && playerLevel < skill.level;
-
-            return (
-              <div key={skill.skillId} className={`skill-card ${learned ? 'learned' : ''} ${can ? 'can-learn' : ''}`}>
-                <div className="skill-header">
-                  <span className="skill-name">{skill.name}</span>
-                  <span className={`skill-type ${getTypeColor(skill.type)}`}>{skill.type}</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '350px', overflowY: 'auto' }}>
+          {skills.map((skill) => (
+            <div
+              key={skill.skillId}
+              onClick={() => setActiveSkill(activeSkill === skill.skillId ? null : skill.skillId)}
+              style={{
+                background: activeSkill === skill.skillId ? '#2a3a2a' : '#1a1a2a',
+                border: `1px solid ${activeSkill === skill.skillId ? '#4a4' : '#334'}`,
+                padding: '8px 12px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+              }}
+            >
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <span style={{ color: '#ddd', fontWeight: 'bold', fontSize: '13px' }}>{skill.name || skill.skillId}</span>
+                  <span style={{ color: '#aaa', fontSize: '11px', marginLeft: '8px' }}>Lv.{skill.level || 1}</span>
+                  <span style={{
+                    color: skill.type === 'Passive' ? '#4af' : skill.type === 'AOE' ? '#f44' : '#4f4',
+                    fontSize: '10px', marginLeft: '6px',
+                  }}>
+                    [{skill.type || 'Active'}]
+                  </span>
                 </div>
-                <div className="skill-desc">{skill.description}</div>
-                <div className="skill-stats">
-                  <span>Class: {skill.class}</span>
-                  <span>Lv: {skill.level}</span>
-                  {skill.damage > 0 && <span>Dmg: {skill.damage}</span>}
-                  {skill.manaCost > 0 && <span>MP: {skill.manaCost}</span>}
-                  {skill.cooldown > 0 && <span>CD: {(skill.cooldown / 1000).toFixed(0)}s</span>}
-                </div>
-                <div className="skill-actions">
-                  {learned && (
-                    <button className="skill-btn learned-btn">Learned</button>
-                  )}
-                  {can && (
-                    <button className="skill-btn learn-btn" onClick={() => handleLearn(skill.skillId)}>
-                      Learn
-                    </button>
-                  )}
-                  {locked && <span className="skill-locked">Requires Level {skill.level}</span>}
-                  {wrongClass && <span className="skill-wrong-class">Wrong class ({skill.class})</span>}
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button onClick={(e) => { e.stopPropagation(); handleUseSkill(skill.skillId); }} style={{
+                    background: '#2a5a2a', color: 'white', border: 'none', padding: '2px 8px',
+                    borderRadius: '3px', cursor: 'pointer', fontSize: '11px',
+                  }}>Use</button>
+                  <button onClick={(e) => { e.stopPropagation(); handleUpgrade(skill.skillId); }} style={{
+                    background: '#5a5a2a', color: 'white', border: 'none', padding: '2px 8px',
+                    borderRadius: '3px', cursor: 'pointer', fontSize: '11px',
+                  }}>Upgrade</button>
                 </div>
               </div>
-            );
-          })}
+              {activeSkill === skill.skillId && (
+                <div style={{ marginTop: '6px', fontSize: '11px', color: '#999' }}>
+                  Damage: {skill.damage || 'N/A'} | Mana: {skill.manaCost || 'N/A'} | Cooldown: {skill.cooldown || 'N/A'}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
     </div>
   );
-}
-
-function getTypeColor(type) {
-  switch (type) {
-    case 'Active': return 'color: #e74c3c';
-    case 'Passive': return 'color: #27ae60';
-    case 'AOE': return 'color: #9b59b6';
-    case 'Buff': return 'color: #f1c40f';
-    case 'Debuff': return 'color: #e67e22';
-    default: return 'color: #aaa';
-  }
 }
